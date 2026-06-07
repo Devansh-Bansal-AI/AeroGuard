@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+env/
+
+# Data files (too large for git)
+data/processed/*.npy
+data/processed/*.joblib
+data/raw/
+
+# Models (large binary files)
+models/*.pth
+models/*.onnx
+models/*.json
+models/*.joblib
+!models/.gitkeep
+
+# Node
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+*.log
+
+# Docker
+docker-compose.override.yml

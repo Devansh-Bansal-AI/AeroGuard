@@ -1,0 +1,55 @@
+# AeroGuard — Docker Compose
+# Spins up the complete 3-tier architecture:
+#   1. edge-api: FastAPI backend + ONNX inference engine
+#   2. dashboard: React cockpit UI
+#
+# Usage: docker-compose up --build
+# Dashboard: http://localhost:3000
+# API: http://localhost:8000
+
+services:
+  # ─── Backend: FastAPI + Edge Inference Node ─────────────────────
+  edge-api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./models:/app/models
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+  # ─── Frontend: React Cockpit Dashboard ─────────────────────────
+  dashboard:
+    build:
+      context: frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    depends_on:
+      edge-api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ─── State Management: Redis ──────────────────────────────────
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    restart: unless-stopped

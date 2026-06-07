@@ -1,0 +1,27 @@
+# Core ML
+numpy>=1.24.0
+pandas>=2.0.0
+scikit-learn>=1.3.0
+scipy>=1.11.0
+xgboost>=2.0.0
+
+# Deep Learning
+torch>=2.1.0
+onnx>=1.15.0
+onnxruntime>=1.16.0
+
+# State Management
+redis>=5.0.1
+
+# Explainability
+shap>=0.43.0
+
+# Backend
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+sse-starlette>=1.8.2
+pydantic>=2.5.0
+
+# Utilities
+tqdm>=4.66.0
+joblib>=1.3.0
