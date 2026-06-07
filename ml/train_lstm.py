@@ -33,13 +33,13 @@ DATA_DIR = os.path.join(PROJECT_ROOT, "data", "processed")
 MODEL_DIR = os.path.join(PROJECT_ROOT, "models")
 
 # Hyperparameters
-HIDDEN_SIZE = 64
-NUM_LAYERS = 2
-DROPOUT = 0.3
-LEARNING_RATE = 1e-3
-BATCH_SIZE = 256
-EPOCHS = 60
-PATIENCE = 12          # Early stopping patience
+HIDDEN_SIZE = 32
+NUM_LAYERS = 1
+DROPOUT = 0.5
+LEARNING_RATE = 3e-4
+BATCH_SIZE = 128
+EPOCHS = 80
+PATIENCE = 18          # Early stopping patience
 MAX_RUL = 125          # Matches preprocessing
 
 
@@ -221,8 +221,8 @@ def train_bilstm():
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"  Total parameters:     {total_params:,}")
     print(f"  Trainable parameters: {trainable_params:,}")
-    print(f"  Architecture: Input({n_features}) → Proj({HIDDEN_SIZE}) → "
-          f"BiLSTM({HIDDEN_SIZE}x2, {NUM_LAYERS}L) → Attention → FC → RUL")
+    print(f"  Architecture: Input({n_features}) -> Proj({HIDDEN_SIZE}) -> "
+          f"BiLSTM({HIDDEN_SIZE}x2, {NUM_LAYERS}L) -> Attention -> FC -> RUL")
     
     # ── 3. Training Setup ─────────────────────────────────────────
     print(f"\n[3/5] Training setup...")
@@ -293,13 +293,13 @@ def train_bilstm():
             best_val_loss = val_loss
             best_model_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
             patience_counter = 0
-            status = "★ best"
+            status = "* BEST"
         else:
             patience_counter += 1
             if patience_counter >= PATIENCE:
-                status = "⛔ early stop"
+                status = "EARLY STOP"
             elif patience_counter >= PATIENCE - 3:
-                status = f"⚠ patience {patience_counter}/{PATIENCE}"
+                status = f"! patience {patience_counter}/{PATIENCE}"
         
         if epoch % 3 == 0 or epoch == 1 or status:
             print(f"{epoch:>5} | {train_loss:>11.4f} | {val_loss:>11.4f} | {val_rmse:>9.2f} | {current_lr:>10.6f} | {status}")
@@ -387,7 +387,7 @@ def train_bilstm():
     
     print(f"  Metadata saved: {meta_path}")
     print("\n" + "=" * 60)
-    print("  ✅ BiLSTM+Attention training complete!")
+    print("  [OK] BiLSTM+Attention training complete!")
     print("=" * 60)
     
     return model, metadata

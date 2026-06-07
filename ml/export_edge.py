@@ -82,6 +82,7 @@ def export_onnx(model, checkpoint):
         },
         opset_version=17,
         do_constant_folding=True,
+        dynamo=False,  # Use legacy exporter for cleaner graphs (quantization-compatible)
     )
     
     size_mb = os.path.getsize(onnx_path) / (1024 * 1024)
@@ -321,7 +322,7 @@ def run_benchmarks():
     print("=" * 65)
     
     print(f"\n  Results saved: {results_path}")
-    print("\n  ✅ Edge export pipeline complete!")
+    print("\n  [OK] Edge export pipeline complete!")
     
     return results
 
