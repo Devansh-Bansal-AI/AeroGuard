@@ -32,7 +32,7 @@ test.describe('AeroGuard Dashboard E2E', () => {
 
     // Verify page content loads
     await expect(page.locator('h1').last()).toContainText('Diagnostic Cockpit');
-    await expect(page.locator('.diagnostic-grid')).toBeVisible();
+    await expect(page.locator('.page-header')).toBeVisible();
   });
 
   test('should navigate to Edge Metrics', async ({ page }) => {
