@@ -80,8 +80,7 @@ class InferenceService:
         1. ONNX INT8 (edge-optimized, fastest)
         2. ONNX FP32 (edge-ready)
         3. PyTorch BiLSTM (full precision)
-        4. XGBoost (legacy)
-        5. Simulated mode (no models needed)
+        4. Simulated mode (no models needed)
         """
         print("  Loading ML models...")
         
@@ -414,7 +413,6 @@ class InferenceService:
             "bilstm_pth": "rul_bilstm.pth",
             "onnx_fp32": "rul_bilstm.onnx",
             "onnx_int8": "rul_bilstm_int8.onnx",
-            "xgboost": "rul_model.json",
         }
         for name, filename in model_files.items():
             path = os.path.join(self.model_dir, filename)
