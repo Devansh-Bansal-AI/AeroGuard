@@ -1,4 +1,5 @@
-FROM python:3.11-slim
+# Stage 1: Builder
+FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
@@ -7,15 +8,29 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install Python deps
+# Create virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Install Python deps
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Stage 2: Final
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Copy virtual env from builder
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy application code
 COPY backend/ ./backend/
 COPY ml/ ./ml/
-COPY models/ ./models/
-COPY data/ ./data/
+
+# Create empty directories for mounted volumes
+RUN mkdir -p /app/models /app/data
 
 # Expose port
 EXPOSE 8000

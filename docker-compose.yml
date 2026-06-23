@@ -29,6 +29,8 @@ services:
     depends_on:
       redis:
         condition: service_started
+      timescaledb:
+        condition: service_started
     deploy:
       resources:
         limits:
@@ -47,9 +49,25 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # ─── State Management: Redis ──────────────────────────────────
+  # ─── State Management: Redis (Ephemeral Cache) ──────────────────
   redis:
     image: redis:alpine
     ports:
       - "6379:6379"
     restart: unless-stopped
+
+  # ─── Persistent Storage: TimescaleDB ─────────────────────────
+  timescaledb:
+    image: timescale/timescaledb:latest-pg15
+    environment:
+      - POSTGRES_USER=aeroguard
+      - POSTGRES_PASSWORD=aeroguard_pass
+      - POSTGRES_DB=aeroguard_tsdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  pgdata:

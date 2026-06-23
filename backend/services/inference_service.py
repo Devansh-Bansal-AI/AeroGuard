@@ -6,8 +6,7 @@ Supports multiple inference backends:
   1. ONNX Runtime INT8 (preferred — fastest, smallest)
   2. ONNX Runtime FP32 (fallback)
   3. PyTorch CPU (fallback)
-  4. XGBoost (legacy fallback)
-  5. Simulated mode (no models needed)
+  4. Simulated mode (no models needed)
 
 KEY: This service is called by EngineSimulator to produce REAL model predictions.
 """
@@ -51,7 +50,7 @@ class InferenceService:
     ML model inference service for the backend.
     
     Manages:
-    - Loading trained models (ONNX INT8/FP32, PyTorch, XGBoost)
+    - Loading trained models (ONNX INT8/FP32, PyTorch)
     - Providing predictions for incoming sensor data
     - Feature engineering from raw sensors to model input
     - Graceful fallback to heuristic predictions if models aren't available
@@ -62,12 +61,13 @@ class InferenceService:
         self.model_dir = os.path.join(project_root, "models")
         self.data_dir = os.path.join(project_root, "data", "processed")
         
-        self.rul_model = None       # Can be ONNX session, PyTorch model, or XGBoost
-        self.anomaly_model = None
+        self.rul_model = None       # Can be ONNX session or PyTorch model
+        self.anomaly_detector = None # AnomalyDetector (IsolationForest + LSTM Autoencoder)
         self.scaler = None
         self.metadata = None
         self.is_ready = False
-        self.mode = "simulated"     # "onnx_int8", "onnx_fp32", "pytorch", "xgboost", "simulated"
+        self.mode = "simulated"     # "onnx_int8", "onnx_fp32", "pytorch", "simulated"
+        self._pytorch_explain_model = None  # Cached PyTorch model for explainability
         
         # Feature engineering config
         self.n_features = None
@@ -158,19 +158,6 @@ class InferenceService:
                 except Exception as e:
                     print(f"  [WARN] PyTorch loading failed: {e}")
         
-        # Try XGBoost (legacy fallback)
-        if self.mode == "simulated":
-            xgb_path = os.path.join(self.model_dir, "rul_model.json")
-            if os.path.exists(xgb_path):
-                try:
-                    import xgboost as xgb
-                    self.rul_model = xgb.Booster()
-                    self.rul_model.load_model(xgb_path)
-                    self.mode = "xgboost"
-                    print(f"  [OK] XGBoost model loaded (legacy fallback)")
-                except Exception as e:
-                    print(f"  [WARN] XGBoost loading failed: {e}")
-        
         # Simulated fallback
         if self.mode == "simulated":
             print("  [INFO] No trained models found -- using simulated predictions")
@@ -182,6 +169,23 @@ class InferenceService:
             import joblib
             self.scaler = joblib.load(scaler_path)
             print("  [OK] Feature scaler loaded")
+        
+        # Load anomaly detection models
+        anomaly_meta_path = os.path.join(self.model_dir, "anomaly_metadata.json")
+        if os.path.exists(anomaly_meta_path):
+            try:
+                import sys as _sys
+                ml_dir = os.path.join(self.project_root, "ml")
+                if ml_dir not in _sys.path:
+                    _sys.path.insert(0, ml_dir)
+                from anomaly import AnomalyDetector
+                
+                self.anomaly_detector = AnomalyDetector(n_features=self.n_features or 112)
+                self.anomaly_detector.load(self.model_dir)
+                print(f"  [OK] Anomaly detection loaded (IF + LSTM Autoencoder)")
+            except Exception as e:
+                print(f"  [WARN] Anomaly model loading failed: {e}")
+                self.anomaly_detector = None
         
         self.is_ready = True
         print(f"  [INFO] Inference mode: {self.mode}")
@@ -313,15 +317,19 @@ class InferenceService:
             if X is None:
                 return {"rul": fallback_rul, "anomaly_score": None, "model_used": "simulated"}
             
-            # Run model inference
+            # Run RUL model inference
             rul_pred = float(self.predict_rul(X).flatten()[0])
             
             # Clamp to reasonable range
             rul_pred = max(0.0, min(300.0, rul_pred))
             
+            # Run anomaly detection if available
+            anomaly_result = self.predict_anomaly(X)
+            
             return {
                 "rul": rul_pred,
-                "anomaly_score": None,  # Anomaly from separate model
+                "anomaly_score": anomaly_result["combined_score"] if anomaly_result else None,
+                "is_anomaly": anomaly_result["is_anomaly"] if anomaly_result else None,
                 "model_used": self.mode,
             }
         except Exception as e:
@@ -333,9 +341,7 @@ class InferenceService:
         Predict Remaining Useful Life from pre-processed tensor.
         
         Args:
-            X: Input array — shape depends on mode:
-               - ONNX/PyTorch: (batch, seq_len, n_features)
-               - XGBoost: (batch, n_features)
+            X: Input array of shape (batch, seq_len, n_features)
         
         Returns:
             RUL predictions as numpy array
@@ -352,19 +358,37 @@ class InferenceService:
                 result = self.rul_model(X_tensor)
                 return result.numpy()
         
-        elif self.mode == "xgboost":
-            import xgboost as xgb
-            # XGBoost expects 2D input
-            if X.ndim == 3:
-                X = X[:, -1, :]  # Take last timestep
-            dmatrix = xgb.DMatrix(X)
-            result = self.rul_model.predict(dmatrix)
-            return result
-        
         else:
             # Simulated prediction
             batch_size = X.shape[0] if X.ndim >= 2 else 1
             return np.array([100.0] * batch_size)
+    
+    def predict_anomaly(self, X: np.ndarray) -> dict:
+        """
+        Run anomaly detection on pre-processed tensor.
+        
+        Uses the dual-approach AnomalyDetector:
+        - Isolation Forest on last-timestep features
+        - LSTM Autoencoder reconstruction error
+        - Combined weighted score
+        
+        Args:
+            X: Input array of shape (batch, seq_len, n_features)
+        
+        Returns:
+            Dict with 'combined_score', 'is_anomaly', 'ae_error', 'threshold'
+            or None if anomaly model is not loaded
+        """
+        if self.anomaly_detector is None or not self.anomaly_detector.is_fitted:
+            return None
+        
+        try:
+            # AnomalyDetector.predict_single expects (seq_len, n_features) or (1, seq_len, n_features)
+            result = self.anomaly_detector.predict_single(X[0] if X.ndim == 3 else X)
+            return result
+        except Exception as e:
+            print(f"  [WARN] Anomaly prediction failed: {e}")
+            return None
     
     def get_model_info(self) -> dict:
         """Get model metadata and configuration."""
@@ -405,3 +429,80 @@ class InferenceService:
                 info["benchmarks"] = json.load(f)
         
         return info
+    
+    def explain_prediction(self, sensor_history: list) -> dict:
+        """
+        Generate attention-based explainability for a prediction.
+        
+        Uses the PyTorch model's predict_with_attention() to extract
+        temporal attention weights, showing which timesteps the model
+        focused on most when predicting RUL.
+        
+        Args:
+            sensor_history: List of dicts with sensor readings
+        
+        Returns:
+            Dict with prediction, attention weights, and top contributing timesteps
+            or None if explainability is not available
+        """
+        # Attention explainability requires PyTorch model (not ONNX)
+        pth_path = os.path.join(self.model_dir, "rul_bilstm.pth")
+        if not os.path.exists(pth_path) or len(sensor_history) < SEQUENCE_LENGTH:
+            return None
+        
+        try:
+            import torch
+            import sys as _sys
+            ml_dir = os.path.join(self.project_root, "ml")
+            if ml_dir not in _sys.path:
+                _sys.path.insert(0, ml_dir)
+            from train_lstm import BiLSTMAttentionRUL
+            
+            # Use cached model if available, otherwise load once
+            if self._pytorch_explain_model is None:
+                checkpoint = torch.load(pth_path, map_location="cpu", weights_only=False)
+                model = BiLSTMAttentionRUL(
+                    n_features=checkpoint['n_features'],
+                    hidden_size=checkpoint['hidden_size'],
+                    num_layers=checkpoint['num_layers'],
+                    dropout=checkpoint['dropout'],
+                )
+                model.load_state_dict(checkpoint['model_state_dict'])
+                model.eval()
+                self._pytorch_explain_model = model
+            
+            model = self._pytorch_explain_model
+            
+            # Build input tensor
+            X = self._engineer_features_from_history(sensor_history)
+            if X is None:
+                return None
+            
+            X_tensor = torch.FloatTensor(X)
+            
+            # Get prediction with attention weights
+            with torch.no_grad():
+                rul_pred, attn_weights = model.predict_with_attention(X_tensor)
+            
+            rul = float(rul_pred.flatten()[0])
+            weights = attn_weights.flatten().tolist()
+            
+            # Find top contributing timesteps
+            top_indices = sorted(range(len(weights)), key=lambda i: weights[i], reverse=True)[:10]
+            
+            return {
+                "rul_prediction": round(rul, 2),
+                "attention_weights": [round(w, 6) for w in weights],
+                "top_timesteps": [
+                    {"timestep": idx, "weight": round(weights[idx], 6)}
+                    for idx in top_indices
+                ],
+                "seq_length": len(weights),
+                "interpretation": (
+                    "Higher attention weight = model focused more on that timestep. "
+                    "Recent timesteps with high weights indicate acute degradation signals."
+                ),
+            }
+        except Exception as e:
+            print(f"  [WARN] Explainability failed: {e}")
+            return None

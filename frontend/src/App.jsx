@@ -1,4 +1,8 @@
 import { useState, useEffect, useRef, useCallback, Component } from 'react'
+import { Routes, Route, NavLink } from 'react-router-dom'
+import DiagnosticCockpit from './pages/DiagnosticCockpit'
+import EdgeMetrics from './pages/EdgeMetrics'
+import { SSE_URL, API_URL, getHealthColor, getHealthIcon } from './utils'
 import './index.css'
 
 // ─── Error Boundary ───────────────────────────────────────────────────
@@ -25,30 +29,6 @@ class ErrorBoundary extends Component {
       )
     }
     return this.props.children
-  }
-}
-
-// ─── Configuration ────────────────────────────────────────────────────
-const SSE_URL = import.meta.env.VITE_SSE_URL || 'http://localhost:8000/ws/stream'
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
-
-// ─── Utility Functions ────────────────────────────────────────────────
-
-function getHealthColor(status) {
-  switch (status) {
-    case 'healthy': return 'var(--color-healthy)'
-    case 'warning': return 'var(--color-warning)'
-    case 'critical': return 'var(--color-critical)'
-    default: return 'var(--color-text-dim)'
-  }
-}
-
-function getHealthIcon(status) {
-  switch (status) {
-    case 'healthy': return '●'
-    case 'warning': return '◆'
-    case 'critical': return '▲'
-    default: return '○'
   }
 }
 
@@ -183,7 +163,7 @@ function EngineCard({ engine, isSelected, onClick }) {
           <div className="metric model-badge">
             <span className="metric-label">Inference</span>
             <span className="metric-value" style={{ color: 'var(--color-accent)', fontSize: '0.7rem' }}>
-              XGBoost
+              {engine.model_used.replace('_', ' ').toUpperCase()}
             </span>
           </div>
         )}
@@ -466,7 +446,6 @@ function App() {
     sse.onerror = () => {
       setConnected(false)
       sse.close()
-      // Reconnect handled natively by EventSource, but we can reset state
       setTimeout(connectWs, 2000)
     }
 
@@ -493,7 +472,6 @@ function App() {
 
     setEngines(simEngines)
 
-    // Simulate streaming
     const interval = setInterval(() => {
       setEngines(prev => prev.map(e => {
         const newCycle = e.current_cycle + 1
@@ -501,7 +479,6 @@ function App() {
         const newAnomaly = Math.min(1, Math.max(0, e.anomaly_score + (Math.random() - 0.48) * 0.02))
         const newRul = Math.max(0, e.rul_prediction - 1 + (Math.random() - 0.5) * 2)
 
-        // Evolve sensors slightly
         const newSensors = {}
         Object.entries(e.sensors).forEach(([k, v]) => {
           newSensors[k] = v + (Math.random() - 0.48) * 0.3
@@ -535,7 +512,17 @@ function App() {
             <span className="logo-icon">✈️</span>
             <h1>AeroGuard</h1>
           </div>
-          <span className="tagline">Edge-Native Engine Health Intelligence</span>
+          <nav className="nav-tabs">
+            <NavLink to="/" end className={({ isActive }) => `nav-tab ${isActive ? 'active' : ''}`}>
+              Fleet Dashboard
+            </NavLink>
+            <NavLink to="/diagnostics" className={({ isActive }) => `nav-tab ${isActive ? 'active' : ''}`}>
+              Diagnostics
+            </NavLink>
+            <NavLink to="/edge" className={({ isActive }) => `nav-tab ${isActive ? 'active' : ''}`}>
+              Edge Metrics
+            </NavLink>
+          </nav>
         </div>
         <div className="header-right">
           <div className={`connection-status ${connected ? (timeSinceUpdate > 3 ? 'warning' : 'connected') : 'disconnected'}`}>
@@ -546,37 +533,37 @@ function App() {
         </div>
       </header>
 
-      {/* Fleet Overview */}
-      <FleetOverviewBar engines={engines} />
-
-      {/* Main Content */}
-      <main className="main-content" id="main-content">
-        {/* Engine List */}
-        <section className="engine-list" id="engine-list">
-          <h2 className="section-heading">Fleet Engines</h2>
-          {engines.map(engine => (
-            <EngineCard
-              key={engine.engine_id}
-              engine={engine}
-              isSelected={selectedEngineId === engine.engine_id}
-              onClick={() => setSelectedEngineId(engine.engine_id)}
-            />
-          ))}
-
-          {/* Latency Widget */}
-          <BandwidthWidget metrics={bandwidth} />
-        </section>
-
-        {/* Detail Panel */}
-        <section className="detail-section" id="detail-section">
-          <EngineDetailPanel engine={selectedEngine} history={engineHistory} />
-        </section>
-      </main>
+      <Routes>
+        <Route path="/" element={
+          <>
+            <FleetOverviewBar engines={engines} />
+            <main className="main-content" id="main-content">
+              <section className="engine-list" id="engine-list">
+                <h2 className="section-heading">Fleet Engines</h2>
+                {engines.map(engine => (
+                  <EngineCard
+                    key={engine.engine_id}
+                    engine={engine}
+                    isSelected={selectedEngineId === engine.engine_id}
+                    onClick={() => setSelectedEngineId(engine.engine_id)}
+                  />
+                ))}
+                <BandwidthWidget metrics={bandwidth} />
+              </section>
+              <section className="detail-section" id="detail-section">
+                <EngineDetailPanel engine={selectedEngine} history={engineHistory} />
+              </section>
+            </main>
+          </>
+        } />
+        <Route path="/diagnostics" element={<DiagnosticCockpit />} />
+        <Route path="/edge" element={<EdgeMetrics />} />
+      </Routes>
 
       {/* Footer */}
       <footer className="app-footer">
-        <span>AeroGuard v2.0 — SATCOM Bandwidth Optimizer</span>
-        <span>NASA C-MAPSS Dataset • XGBoost Edge AI • Redis State Management • SSE Streaming</span>
+        <span>AeroGuard v2.0 — Edge-Native Engine Health Intelligence</span>
+        <span>NASA C-MAPSS Dataset • BiLSTM+Attention • ONNX INT8 Edge AI • SSE Streaming</span>
       </footer>
     </div>
   )
@@ -591,3 +578,4 @@ function AppWithErrorBoundary() {
 }
 
 export default AppWithErrorBoundary
+

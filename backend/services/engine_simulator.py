@@ -20,6 +20,7 @@ import json
 import redis
 import os
 from typing import Optional
+from datetime import datetime
 
 
 class EngineState:
@@ -93,8 +94,9 @@ class EngineSimulator:
         inference_service: Optional ML inference service for predictions
     """
     
-    def __init__(self, n_engines: int = 4, inference_service=None):
+    def __init__(self, n_engines: int = 4, inference_service=None, db_engine=None):
         self.inference_service = inference_service
+        self.db_engine = db_engine  # SQLAlchemy/SQLModel engine for persistence
         
         # Create engines at different lifecycle stages for interesting demo
         engine_configs = [
@@ -141,10 +143,33 @@ class EngineSimulator:
                 engine.current_cycle += 1
                 
     def _save_reading(self, engine_id: int, reading: dict):
+        # Save to Redis (real-time cache)
         if self.redis_client:
             self.redis_client.rpush(f"engine:{engine_id}:history", json.dumps(reading))
             # Keep only last 200 readings
             self.redis_client.ltrim(f"engine:{engine_id}:history", -200, -1)
+        
+        # Persist to database (best-effort, non-blocking)
+        if self.db_engine is not None:
+            try:
+                from sqlmodel import Session
+                from backend.db.models import SensorReadingHistory
+                
+                record = SensorReadingHistory(
+                    engine_id=reading["engine_id"],
+                    cycle=reading["cycle"],
+                    timestamp=datetime.utcnow(),
+                    rul_prediction=reading["rul_prediction"],
+                    anomaly_score=reading["anomaly_score"],
+                    is_anomaly=reading["is_anomaly"],
+                    health_status=reading["health_status"],
+                    sensors_json=json.dumps(reading["sensors"]),
+                )
+                with Session(self.db_engine) as session:
+                    session.add(record)
+                    session.commit()
+            except Exception:
+                pass  # Don't let DB errors break the simulator
             
     def _get_history(self, engine_id: int) -> list:
         if self.redis_client:
@@ -204,6 +229,7 @@ class EngineSimulator:
         true_rul = max(0, engine.max_life - engine.current_cycle)
         
         history = self._get_history(engine.engine_id)
+        prediction = None  # Will hold model output (RUL + anomaly) if available
         
         if (self.inference_service and 
             self.inference_service.is_ready and 
@@ -222,11 +248,18 @@ class EngineSimulator:
             predicted_rul = max(0, true_rul + engine.rng.normal(0, 5))
             model_used = "simulated"
         
-        # Anomaly score (increases with degradation)
-        base_anomaly = min(1.0, degradation * 0.8)
-        anomaly_noise = engine.rng.normal(0, 0.05)
-        anomaly_score = max(0, min(1.0, base_anomaly + anomaly_noise))
-        is_anomaly = anomaly_score > 0.65 or predicted_rul < 30  # PRD: alert when RUL < 30
+        # Anomaly detection — use real model output if available
+        if (prediction is not None and 
+            prediction.get("anomaly_score") is not None):
+            # Real anomaly model output (IF + LSTM Autoencoder)
+            anomaly_score = float(prediction["anomaly_score"])
+            is_anomaly = bool(prediction.get("is_anomaly", anomaly_score > 0.65))
+        else:
+            # Heuristic fallback (increases with degradation)
+            base_anomaly = min(1.0, degradation * 0.8)
+            anomaly_noise = engine.rng.normal(0, 0.05)
+            anomaly_score = max(0, min(1.0, base_anomaly + anomaly_noise))
+            is_anomaly = anomaly_score > 0.65 or predicted_rul < 30
         
         return {
             "engine_id": engine.engine_id,
@@ -307,9 +340,28 @@ class EngineSimulator:
     def get_engine_status(self, engine_id: int) -> Optional[dict]:
         """Get detailed status for a specific engine."""
         engine = self.engines.get(engine_id)
-        history = self._get_history(engine_id) if engine else []
-        if not engine or not history:
+        if not engine:
             return None
+        
+        history = self._get_history(engine_id)
+        if not history:
+            # Return basic state even without history (e.g. Redis is down)
+            return {
+                "engine_id": engine.engine_id,
+                "name": getattr(engine, "name", f"Engine #{engine.engine_id}"),
+                "current_cycle": engine.current_cycle,
+                "max_life": engine.max_life,
+                "life_progress": round(engine.current_cycle / engine.max_life * 100, 1),
+                "rul_prediction": engine.rul_prediction,
+                "anomaly_score": engine.anomaly_score,
+                "is_anomaly": engine.is_anomaly,
+                "health_status": engine.health_status,
+                "trend": engine.trend,
+                "model_used": "simulated",
+                "sensors": {},
+                "sensor_trends": {},
+                "history_length": 0,
+            }
         
         latest = history[-1]
         

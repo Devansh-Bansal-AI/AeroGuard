@@ -30,6 +30,7 @@ sys.path.insert(0, PROJECT_ROOT)
 
 from backend.services.engine_simulator import EngineSimulator
 from backend.services.inference_service import InferenceService
+from backend.db.database import init_db, engine as db_engine
 
 
 # ─── Lifespan ──────────────────────────────────────────────────────────
@@ -45,6 +46,15 @@ async def lifespan(app: FastAPI):
     
     print("\n>>> AeroGuard Backend Starting...")
     
+    # Initialize database
+    db_available = False
+    try:
+        init_db()
+        print("  [OK] Database initialized")
+        db_available = True
+    except Exception as e:
+        print(f"  [WARN] Database initialization failed: {e}")
+        
     # Initialize inference service (loads models or creates with synthetic data)
     inference_service = InferenceService(project_root=PROJECT_ROOT)
     await inference_service.initialize()
@@ -52,7 +62,8 @@ async def lifespan(app: FastAPI):
     # Initialize engine simulator
     engine_simulator = EngineSimulator(
         n_engines=4,
-        inference_service=inference_service
+        inference_service=inference_service,
+        db_engine=db_engine if db_available else None,
     )
     
     print("[OK] AeroGuard Backend Ready!\n")
@@ -211,6 +222,85 @@ async def get_benchmark_results():
     }
 
 
+@app.get("/api/engine/{engine_id}/db-history")
+async def get_engine_db_history(engine_id: int, limit: int = 200):
+    """Get persisted historical readings from the database."""
+    try:
+        from sqlmodel import Session, select
+        from backend.db.models import SensorReadingHistory
+        
+        with Session(db_engine) as session:
+            statement = (
+                select(SensorReadingHistory)
+                .where(SensorReadingHistory.engine_id == engine_id)
+                .order_by(SensorReadingHistory.timestamp.desc())
+                .limit(limit)
+            )
+            results = session.exec(statement).all()
+        
+        return {
+            "engine_id": engine_id,
+            "count": len(results),
+            "readings": [
+                {
+                    "cycle": r.cycle,
+                    "timestamp": r.timestamp.isoformat(),
+                    "rul_prediction": r.rul_prediction,
+                    "anomaly_score": r.anomaly_score,
+                    "is_anomaly": r.is_anomaly,
+                    "health_status": r.health_status,
+                    "sensors": json.loads(r.sensors_json),
+                }
+                for r in reversed(results)  # Chronological order
+            ],
+        }
+    except Exception as e:
+        return {
+            "engine_id": engine_id,
+            "count": 0,
+            "readings": [],
+            "warning": f"Database not available: {str(e)}",
+        }
+
+
+@app.get("/api/engine/{engine_id}/explain")
+async def explain_prediction(engine_id: int):
+    """
+    Get attention-based explainability for an engine's RUL prediction.
+    
+    Returns temporal attention weights showing which timesteps the model
+    focused on most. This demonstrates model interpretability.
+    """
+    if not engine_simulator or not inference_service:
+        raise HTTPException(status_code=503, detail="Services not initialized")
+    
+    # Get sensor history for this engine
+    history = engine_simulator._get_history(engine_id)
+    if not history or len(history) < 50:
+        return {
+            "engine_id": engine_id,
+            "available": False,
+            "reason": f"Need 50+ readings, have {len(history) if history else 0}",
+        }
+    
+    # Build sensor history
+    sensor_hist = [r["sensors"] for r in history]
+    
+    # Get explainability from InferenceService
+    explanation = inference_service.explain_prediction(sensor_hist)
+    
+    if explanation is None:
+        return {
+            "engine_id": engine_id,
+            "available": False,
+            "reason": "PyTorch model required for attention explainability",
+        }
+    
+    explanation["engine_id"] = engine_id
+    explanation["available"] = True
+    return explanation
+
+
 # ─── Data Ingestion ───────────────────────────────────────────────────
 
 @app.post("/api/telemetry")
@@ -306,4 +396,4 @@ async def sse_engine_detail(request: Request, engine_id: int):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, reload=True)
