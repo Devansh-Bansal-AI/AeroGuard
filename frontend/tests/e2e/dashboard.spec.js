@@ -31,7 +31,7 @@ test.describe('AeroGuard Dashboard E2E', () => {
     await expect(page).toHaveURL(/.*\/diagnostics/);
 
     // Verify page content loads
-    await expect(page.locator('h1')).toContainText('Diagnostic Cockpit');
+    await expect(page.locator('h1').last()).toContainText('Diagnostic Cockpit');
     await expect(page.locator('.diagnostic-grid')).toBeVisible();
   });
 
@@ -45,6 +45,6 @@ test.describe('AeroGuard Dashboard E2E', () => {
     await expect(page).toHaveURL(/.*\/edge/);
 
     // Verify page content loads
-    await expect(page.locator('h1')).toContainText('Edge Intelligence Metrics');
+    await expect(page.locator('h1').last()).toContainText('Edge Intelligence Metrics');
   });
 });
