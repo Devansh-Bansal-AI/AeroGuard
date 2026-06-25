@@ -14,11 +14,8 @@ data/processed/*.npy
 data/processed/*.joblib
 data/raw/
 
-# Models (large binary files)
-models/*.pth
-models/*.onnx
-models/*.json
-models/*.joblib
+# Models
+# (Removed ignores because AeroGuard's quantized models are < 3MB total and needed for Docker/CI)
 !models/.gitkeep
 
 # Node

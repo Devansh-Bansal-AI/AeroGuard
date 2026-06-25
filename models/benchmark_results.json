@@ -1,0 +1,33 @@
+{
+  "pytorch_cpu": {
+    "mean_ms": 2.345,
+    "median_ms": 2.322,
+    "p95_ms": 2.936,
+    "p99_ms": 3.706,
+    "min_ms": 1.638,
+    "max_ms": 5.387,
+    "model_size_mb": 0.103
+  },
+  "onnx_fp32": {
+    "mean_ms": 0.592,
+    "median_ms": 0.39,
+    "p95_ms": 2.275,
+    "p99_ms": 2.99,
+    "min_ms": 0.318,
+    "max_ms": 4.426,
+    "model_size_mb": 0.1
+  },
+  "onnx_int8": {
+    "mean_ms": 0.549,
+    "median_ms": 0.402,
+    "p95_ms": 1.822,
+    "p99_ms": 2.697,
+    "min_ms": 0.319,
+    "max_ms": 3.332,
+    "model_size_mb": 0.037
+  },
+  "speedup_onnx_vs_pytorch": 3.96,
+  "speedup_int8_vs_pytorch": 4.27,
+  "compression_int8_vs_fp32_pct": 62.7,
+  "n_benchmark_runs": 200
+}

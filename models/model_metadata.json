@@ -1,0 +1,15 @@
+{
+  "model_type": "bilstm_attention",
+  "n_features": 112,
+  "sequence_length": 50,
+  "hidden_size": 32,
+  "num_layers": 1,
+  "total_params": 25249,
+  "rmse": 41.2619,
+  "mae": 35.8221,
+  "nasa_score": 133662.0156,
+  "model_size_mb": 0.103,
+  "training_time_s": 221.0,
+  "epochs_trained": 22,
+  "device": "cpu"
+}
