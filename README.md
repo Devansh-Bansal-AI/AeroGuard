@@ -90,6 +90,8 @@ Aircraft engine failures cause **$150K+/hour** in AOG (Aircraft on Ground) costs
 
 ```
 AeroGuard/
+├── .github/workflows/              # CI/CD
+│   └── ci.yml                      # GitHub Actions: pytest + build + Playwright
 ├── backend/                        # FastAPI backend
 │   ├── main.py                     # App entry + REST + SSE streaming
 │   ├── Dockerfile                  # Backend container
@@ -99,18 +101,29 @@ AeroGuard/
 │   └── services/
 │       ├── engine_simulator.py     # Real-time 4-engine fleet simulator
 │       └── inference_service.py    # ONNX/PyTorch inference + anomaly + explainability
-├── ml/                             # ML pipeline
+├── ml/                             # ML pipeline (Python package)
+│   ├── __init__.py                 # Package init
 │   ├── preprocess.py               # C-MAPSS preprocessing + synthetic data gen
 │   ├── train_lstm.py               # BiLSTM + Attention RUL model (PyTorch)
 │   ├── anomaly.py                  # Isolation Forest + LSTM Autoencoder
 │   └── export_edge.py             # ONNX export + INT8 quantization + benchmark
 ├── frontend/                       # React 19 dashboard
 │   ├── Dockerfile                  # Frontend container
+│   ├── playwright.config.ts        # E2E test configuration
+│   ├── tests/e2e/
+│   │   └── dashboard.spec.js       # Playwright E2E tests (3 × 3 browsers)
 │   └── src/
-│       ├── App.jsx                 # Fleet Dashboard + routing
+│       ├── App.jsx                 # Fleet Dashboard + routing (237 lines)
 │       ├── main.jsx                # React Router entry point
 │       ├── utils.js                # Shared constants and utilities
 │       ├── index.css               # Cockpit-inspired dark theme (1300+ lines)
+│       ├── components/             # Extracted UI components
+│       │   ├── EngineCard.jsx      # Individual engine status card
+│       │   ├── EngineDetailPanel.jsx # Detailed sensor view + charts
+│       │   ├── FleetOverviewBar.jsx  # Fleet-wide stats bar
+│       │   ├── BandwidthWidget.jsx   # Edge bandwidth monitor
+│       │   ├── RadialGauge.jsx       # SVG radial health gauge
+│       │   └── Sparkline.jsx         # Mini inline chart component
 │       └── pages/
 │           ├── DiagnosticCockpit.jsx  # Recharts: RUL trends, attention heatmap, radar
 │           └── EdgeMetrics.jsx        # Recharts: latency bars, model size, pipeline
@@ -123,10 +136,11 @@ AeroGuard/
 │   ├── model_metadata.json        # Training metrics (RMSE, NASA Score)
 │   ├── anomaly_metadata.json      # Anomaly model config
 │   └── benchmark_results.json     # Edge inference benchmarks
-├── tests/                          # Test suite (12 tests)
+├── tests/                          # Backend test suite (12 tests)
 │   ├── test_api.py                # API endpoint tests (5 tests)
 │   ├── test_model.py              # Model quality + ONNX integrity (6 tests)
 │   └── test_preprocess.py         # Data pipeline test (1 test)
+├── .env.example                    # Environment variable template
 ├── docker-compose.yml              # 4-service orchestration
 ├── requirements.txt                # Python dependencies
 └── README.md
@@ -194,8 +208,8 @@ npm run dev
 
 ## 🧪 Testing
 
+### Backend Tests (Pytest)
 ```bash
-# Run all tests
 pytest tests/ -v
 
 # Expected output: 12 passed
@@ -203,6 +217,22 @@ pytest tests/ -v
 # - test_model.py: 6 tests (metadata, RMSE, ONNX exist, compression, INT8 accuracy, benchmarks)
 # - test_preprocess.py: 1 test (full pipeline)
 ```
+
+### Frontend E2E Tests (Playwright)
+```bash
+cd frontend
+npm run test:e2e
+
+# Runs 3 tests × 3 browsers (Chromium, Firefox, WebKit) = 9 test cases
+# - Dashboard load + fleet overview visibility
+# - Navigation to Diagnostic Cockpit
+# - Navigation to Edge Metrics
+```
+
+### CI/CD (GitHub Actions)
+Every push to `main` and every PR triggers:
+1. **Backend job:** Python 3.11 → `pip install` → `pytest tests/ -v`
+2. **Frontend job:** Node 18 → `npm ci` → `npm run build` → Playwright E2E
 
 ---
 

@@ -20,7 +20,7 @@ import json
 import redis
 import os
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class EngineState:
@@ -158,7 +158,7 @@ class EngineSimulator:
                 record = SensorReadingHistory(
                     engine_id=reading["engine_id"],
                     cycle=reading["cycle"],
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                     rul_prediction=reading["rul_prediction"],
                     anomaly_score=reading["anomaly_score"],
                     is_anomaly=reading["is_anomaly"],

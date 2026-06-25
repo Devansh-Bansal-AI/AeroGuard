@@ -134,14 +134,12 @@ class InferenceService:
             if os.path.exists(pth_path):
                 try:
                     import torch
-                    sys_path_added = False
                     ml_dir = os.path.join(self.project_root, "ml")
                     import sys
                     if ml_dir not in sys.path:
                         sys.path.insert(0, ml_dir)
-                        sys_path_added = True
                     
-                    from train_lstm import BiLSTMAttentionRUL
+                    from ml.train_lstm import BiLSTMAttentionRUL
                     
                     checkpoint = torch.load(pth_path, map_location="cpu", weights_only=False)
                     self.rul_model = BiLSTMAttentionRUL(
@@ -177,7 +175,7 @@ class InferenceService:
                 ml_dir = os.path.join(self.project_root, "ml")
                 if ml_dir not in _sys.path:
                     _sys.path.insert(0, ml_dir)
-                from anomaly import AnomalyDetector
+                from ml.anomaly import AnomalyDetector
                 
                 self.anomaly_detector = AnomalyDetector(n_features=self.n_features or 112)
                 self.anomaly_detector.load(self.model_dir)
@@ -201,9 +199,8 @@ class InferenceService:
                            Must have at least SEQUENCE_LENGTH entries.
         
         Returns:
-            np.ndarray — shape depends on model mode:
-              - ONNX/PyTorch: (1, SEQUENCE_LENGTH, n_features)
-              - XGBoost: (1, n_features)
+            np.ndarray — shape (1, SEQUENCE_LENGTH, n_features) for
+              ONNX and PyTorch sequential models.
         """
         if len(sensor_history) < SEQUENCE_LENGTH:
             return None
@@ -287,7 +284,7 @@ class InferenceService:
             # Sequential models need full sequence: (1, seq_len, n_features)
             return sequence[np.newaxis, :].astype(np.float32)
         else:
-            # XGBoost/tabular: last timestep only (1, n_features)
+            # Tabular fallback: last timestep only (1, n_features)
             return sequence[-1:].astype(np.float32)
     
     def predict_from_sensors(self, sensor_history: list, 
@@ -454,7 +451,7 @@ class InferenceService:
             ml_dir = os.path.join(self.project_root, "ml")
             if ml_dir not in _sys.path:
                 _sys.path.insert(0, ml_dir)
-            from train_lstm import BiLSTMAttentionRUL
+            from ml.train_lstm import BiLSTMAttentionRUL
             
             # Use cached model if available, otherwise load once
             if self._pytorch_explain_model is None:
