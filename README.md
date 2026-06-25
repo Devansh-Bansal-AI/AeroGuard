@@ -32,21 +32,21 @@ Aircraft engine failures cause **$150K+/hour** in AOG (Aircraft on Ground) costs
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                         AeroGuard System                                │
 │                                                                         │
-│  ┌───────────────────┐   ┌──────────────────┐   ┌──────────────────┐   │
-│  │  Edge AI Node      │   │  API Gateway     │   │  React Dashboard │   │
-│  │  (Docker)          │──▶│  (Docker)        │──▶│  (Docker)        │   │
-│  │                    │   │                  │   │                  │   │
-│  │  • ONNX INT8 RUL   │   │  • FastAPI REST  │   │  • Fleet Monitor │   │
-│  │  • IF + LSTM AE    │   │  • SSE Streaming │   │  • Diagnostics   │   │
-│  │  • Feature Eng     │   │  • Explainability│   │  • Edge Metrics  │   │
-│  │  • Redis Cache     │   │  • TimescaleDB   │   │  • Recharts Viz  │   │
-│  └───────────────────┘   └──────────────────┘   └──────────────────┘   │
+│  ┌───────────────────┐   ┌──────────────────┐   ┌──────────────────┐    │
+│  │  Edge AI Node     │   │  API Gateway     │   │  React Dashboard │    │
+│  │  (Docker)         │──>│  (Docker)        │──>│  (Docker)        │    │
+│  │                   │   │                  │   │                  │    │
+│  │  • ONNX INT8 RUL  │   │  • FastAPI REST  │   │  • Fleet Monitor │    │
+│  │  • IF + LSTM AE   │   │  • SSE Streaming │   │  • Diagnostics   │    │
+│  │  • Feature Eng    │   │  • Explainability│   │  • Edge Metrics  │    │
+│  │  • Redis Cache    │   │  • TimescaleDB   │   │  • Recharts Viz  │    │
+│  └───────────────────┘   └──────────────────┘   └──────────────────┘    │
 │                                                                         │
 │  ML Pipeline (Offline Training)                                         │
 │  ┌─────────────────────────────────────────────────────────────────┐    │
-│  │  C-MAPSS Data → 112 Features → BiLSTM+Attention → ONNX INT8   │    │
-│  │  Synthetic Gen   Rolling Stats  Huber Loss         Quantized   │    │
-│  │                  + Rate of Chg  + NASA Score        0.04 MB    │    │
+│  │  C-MAPSS Data → 112 Features → BiLSTM+Attention → ONNX INT8     │    │
+│  │  Synthetic Gen   Rolling Stats  Huber Loss         Quantized    │    │
+│  │                  + Rate of Chg  + NASA Score        0.04 MB     │    │
 │  └─────────────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
