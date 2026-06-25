@@ -283,19 +283,7 @@ services:
 
 Resource constraints (`256MB RAM, 0.5 CPU`) simulate real edge hardware limitations.
 
----
 
-## 👥 Team
-
-| Role | Responsibility |
-|------|---------------|
-| ML Lead | BiLSTM training, evaluation, NASA scoring, anomaly detection |
-| Edge AI Engineer | ONNX export, INT8 quantization, latency benchmarking |
-| Backend Engineer | FastAPI, SSE streaming, explainability API, TimescaleDB |
-| Frontend Engineer | React dashboard, Recharts visualizations, multi-page routing |
-| DevOps + Research | Docker, data pipeline, testing, documentation |
-
----
 
 ## 📄 License
 
